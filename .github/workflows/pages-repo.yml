@@ -1,0 +1,96 @@
+name: APT/YUM repo (GitHub Pages)
+
+# Builds GPG-signed apt + yum repositories from a release's .deb/.rpm and deploys
+# them to GitHub Pages, so users get `apt upgrade` / `dnf upgrade` for free:
+#   apt:  https://rezmoss.github.io/ip-watch/deb
+#   yum:  https://rezmoss.github.io/ip-watch/rpm
+# Runs after each published release; can also be run on-demand against the latest.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install repo tooling
+        run: sudo apt-get update && sudo apt-get install -y apt-utils createrepo-c gnupg
+
+      - name: Import GPG signing key
+        run: echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+
+      - name: Resolve release tag
+        id: rel
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          if [ -z "$TAG" ]; then
+            TAG=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName -q .tagName)
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Download packages from the release
+        run: |
+          mkdir -p pkgs
+          gh release download "${{ steps.rel.outputs.tag }}" --repo "$GITHUB_REPOSITORY" \
+            --dir pkgs --pattern '*.deb' --pattern '*.rpm'
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Build signed apt + yum repositories
+        env:
+          FPR: ${{ secrets.GPG_FINGERPRINT }}
+        run: |
+          set -eux
+          SITE=site
+          mkdir -p "$SITE/deb" "$SITE/rpm"
+          gpg --armor --export "$FPR" > "$SITE/ip-watch-signing-key.asc"
+
+          # ---- APT (flat, signed repo) ----
+          cp pkgs/*.deb "$SITE/deb/"
+          (
+            cd "$SITE/deb"
+            apt-ftparchive packages . > Packages
+            gzip -kf Packages
+            apt-ftparchive \
+              -o APT::FTPArchive::Release::Origin=ip-watch \
+              -o APT::FTPArchive::Release::Label=ip-watch \
+              -o APT::FTPArchive::Release::Suite=stable \
+              release . > Release
+            gpg --batch --yes --pinentry-mode loopback -u "$FPR" --clearsign -o InRelease Release
+            gpg --batch --yes --pinentry-mode loopback -u "$FPR" -abs -o Release.gpg Release
+          )
+
+          # ---- YUM (signed repomd) ----
+          cp pkgs/*.rpm "$SITE/rpm/"
+          createrepo_c "$SITE/rpm"
+          gpg --batch --yes --pinentry-mode loopback -u "$FPR" --detach-sign --armor "$SITE/rpm/repodata/repomd.xml"
+
+          # ---- static descriptors (committed under deploy/pages) ----
+          cp deploy/pages/ip-watch.repo "$SITE/ip-watch.repo"
+          sed "s/__TAG__/${{ steps.rel.outputs.tag }}/g" deploy/pages/index.html > "$SITE/index.html"
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4

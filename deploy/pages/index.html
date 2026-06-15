@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ip-watch package repositories</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font: 16px/1.6 system-ui, sans-serif; max-width: 780px; margin: 2rem auto; padding: 0 1rem; color: #222; }
+  pre { background: #f5f5f5; padding: 1rem; border-radius: 8px; overflow: auto; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  h2 { margin-top: 2rem; }
+  a { color: #2563eb; }
+</style>
+</head>
+<body>
+<h1>ip-watch package repositories</h1>
+<p>GPG-signed apt &amp; yum repositories for
+<a href="https://github.com/rezmoss/ip-watch">ip-watch</a> (latest: <b>__TAG__</b>).
+Packages and repository metadata are verified with the
+<a href="ip-watch-signing-key.asc">release signing key</a>.</p>
+
+<h2>Debian / Ubuntu (apt)</h2>
+<pre>sudo install -d /usr/share/keyrings
+curl -fsSL https://rezmoss.github.io/ip-watch/ip-watch-signing-key.asc | sudo tee /usr/share/keyrings/ip-watch.asc >/dev/null
+echo "deb [signed-by=/usr/share/keyrings/ip-watch.asc] https://rezmoss.github.io/ip-watch/deb ./" | sudo tee /etc/apt/sources.list.d/ip-watch.list
+sudo apt-get update &amp;&amp; sudo apt-get install ip-watch</pre>
+
+<h2>Fedora / RHEL / CentOS / openSUSE (dnf)</h2>
+<pre>sudo curl -fsSL https://rezmoss.github.io/ip-watch/ip-watch.repo -o /etc/yum.repos.d/ip-watch.repo
+sudo dnf install ip-watch</pre>
+
+<p>After setup, <code>apt upgrade</code> / <code>dnf upgrade</code> tracks new releases automatically.
+Other install methods (one-line script, Homebrew, containers, raw binaries) are in the
+<a href="https://github.com/rezmoss/ip-watch#install">project README</a>.</p>
+</body>
+</html>

@@ -1,0 +1,7 @@
+[ip-watch]
+name=ip-watch
+baseurl=https://rezmoss.github.io/ip-watch/rpm
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://rezmoss.github.io/ip-watch/ip-watch-signing-key.asc
