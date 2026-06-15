@@ -4,10 +4,14 @@ name: APT/YUM repo (GitHub Pages)
 # them to GitHub Pages, so users get `apt upgrade` / `dnf upgrade` for free:
 #   apt:  https://rezmoss.github.io/ip-watch/deb
 #   yum:  https://rezmoss.github.io/ip-watch/rpm
-# Runs after each published release; can also be run on-demand against the latest.
+# Triggered AFTER the Release workflow finishes (not on the `release` event) for two
+# reasons: (1) workflow_run executes on the default branch, which the github-pages
+# environment's deployment-branch policy allows — a tag ref does not; (2) it waits
+# until GoReleaser has finished uploading every .deb/.rpm. Also runnable on demand.
 on:
-  release:
-    types: [published]
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -22,6 +26,8 @@ concurrency:
 jobs:
   build-deploy:
     runs-on: ubuntu-latest
+    # Only after a successful release (or a manual run); skip failed Release runs.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
