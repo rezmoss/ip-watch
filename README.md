@@ -94,7 +94,7 @@ containers over the Docker socket, with no changes to the host).
 | 🔒 **Hardened by default** | Loopback bind, HTTP Basic auth, CSRF protection, refuses to expose an unauthenticated root API. |
 | 📟 **CLI + Web UI** | A self-documenting CLI (stable JSON output) and an embedded Vue 3 + Tailwind UI. Use either. |
 | 📈 **Observability** | `/healthz`, Prometheus `/metrics`, run history, and optional Slack/Mattermost/generic webhooks. |
-| 📦 **Ships everywhere** | `.deb`, `.rpm`, `.apk`, tarball, `go install`, Docker image. 8 Linux architectures. |
+| 📦 **Ships everywhere** | Signed apt/yum repo, `.deb`/`.rpm`/`.apk`, Homebrew, Nix, one-line installer, `go install`, multi-arch Docker (GHCR + Docker Hub). 8 Linux arches. |
 
 ## Supported engines
 
@@ -151,38 +151,68 @@ Re-run it anytime to **upgrade in place** (your config and admin password are ke
 `… | sudo sh -s -- v1.2.3`. Prefer your distro's package manager? Use one of the options below.
 
 <details open>
-<summary><b>Debian / Ubuntu (and derivatives: Mint, Pop!_OS, Kali, Raspbian)</b></summary>
+<summary><b>APT / DNF repository — recommended (signed, gives <code>apt upgrade</code> / <code>dnf upgrade</code>)</b></summary>
 
+Add the signed repository once, then install and upgrade like any other package.
+
+**Debian / Ubuntu** (and Mint, Pop!_OS, Kali, Raspbian):
 ```sh
-# Grab the .deb for your arch from the latest release, then:
-sudo dpkg -i ip-watch_*_amd64.deb        # arm64: ip-watch_*_arm64.deb
-sudo systemctl status ip-watch
+sudo install -d /usr/share/keyrings
+curl -fsSL https://rezmoss.github.io/ip-watch/ip-watch-signing-key.asc | sudo tee /usr/share/keyrings/ip-watch.asc >/dev/null
+echo "deb [signed-by=/usr/share/keyrings/ip-watch.asc] https://rezmoss.github.io/ip-watch/deb ./" | sudo tee /etc/apt/sources.list.d/ip-watch.list
+sudo apt-get update && sudo apt-get install ip-watch
 ```
+
+**Fedora / RHEL / CentOS Stream / Rocky / AlmaLinux**:
+```sh
+sudo curl -fsSL https://rezmoss.github.io/ip-watch/ip-watch.repo -o /etc/yum.repos.d/ip-watch.repo
+sudo dnf install ip-watch
+```
+
+**openSUSE**:
+```sh
+sudo zypper addrepo https://rezmoss.github.io/ip-watch/ip-watch.repo
+sudo zypper install ip-watch
+```
+
+Packages **and** repository metadata are GPG-signed; new releases land via `apt upgrade` / `dnf upgrade`.
+Browse the repo at <https://rezmoss.github.io/ip-watch>.
 </details>
 
 <details>
-<summary><b>Fedora / RHEL / CentOS Stream / Rocky / AlmaLinux / openSUSE</b></summary>
+<summary><b>Single .deb / .rpm / .apk (manual, no auto-updates)</b></summary>
+
+Grab the file matching your arch from the [latest release](https://github.com/rezmoss/ip-watch/releases/latest):
 
 ```sh
-sudo rpm -i ip-watch_*_amd64.rpm
-# or, to pull deps: sudo dnf install ./ip-watch_*.x86_64.rpm
-sudo systemctl status ip-watch
-```
-</details>
+# Debian / Ubuntu
+sudo dpkg -i ip-watch_*_amd64.deb            # arm64: ip-watch_*_arm64.deb
 
-<details>
-<summary><b>Alpine</b></summary>
+# Fedora / RHEL / openSUSE  (rpm is GPG-signed)
+sudo rpm -i ip-watch_*_amd64.rpm             # or: sudo dnf install ./ip-watch_*.rpm
 
-```sh
+# Alpine
 sudo apk add --allow-untrusted ip-watch_*_amd64.apk
-rc-service ip-watch status   # or: service ip-watch status
+
+sudo systemctl status ip-watch               # Alpine: rc-service ip-watch status
 ```
+For automatic updates, prefer the repository above.
+</details>
+
+<details>
+<summary><b>Homebrew (Linux / Linuxbrew)</b></summary>
+
+```sh
+brew install rezmoss/tap/ip-watch
+```
+Linux only — it's a Linux tool, so there's no macOS bottle. Installs the binary only; for the managed
+systemd service use the package repository or the one-line installer.
 </details>
 
 <details>
 <summary><b>Arch / Manjaro</b></summary>
 
-Use the generic binary tarball below or [build from source](#build--test). (An AUR package is planned.)
+Use the generic binary tarball below or [build from source](#build--test). (An AUR package, `ip-watch-bin`, is planned.)
 </details>
 
 <details>
@@ -240,8 +270,21 @@ The UI binds **loopback** by default. To reach it from your laptop, SSH-tunnel (
 ssh -L 8080:127.0.0.1:8080 user@your-server   # then open http://127.0.0.1:8080
 ```
 
-> **Verify your download.** Each release ships `checksums.txt`:
-> `sha256sum -c checksums.txt --ignore-missing`
+> **Verify your downloads.** Releases are signed end to end — `checksums.txt` has a detached GPG signature,
+> the apt/yum repos and the `.rpm` are GPG-signed, container images are **cosign** (keyless/Sigstore) signed, and
+> a CycloneDX **SBOM** ships next to every archive.
+>
+> ```sh
+> # 1. checksums
+> sha256sum -c checksums.txt --ignore-missing
+> # 2. GPG-verify the checksums file
+> curl -fsSL https://rezmoss.github.io/ip-watch/ip-watch-signing-key.asc | gpg --import
+> gpg --verify checksums.txt.sig checksums.txt
+> # 3. verify a container image (no key needed)
+> cosign verify ghcr.io/rezmoss/ip-watch:latest \
+>   --certificate-identity-regexp 'https://github.com/rezmoss/ip-watch' \
+>   --certificate-oidc-issuer https://token.actions.githubusercontent.com
+> ```
 
 ## Quick start
 
@@ -479,6 +522,13 @@ ip-watch runs as root (it edits webserver configs and firewall rules), so it is 
 The product is the binary; the container is a thin wrapper for managing **sibling containers** over the Docker
 socket. To manage a host-installed webserver, run the binary natively.
 
+Images are published multi-arch (amd64 + arm64) and **cosign-signed**, on two registries:
+
+```sh
+docker pull ghcr.io/rezmoss/ip-watch:latest      # GitHub Container Registry
+docker pull rezmoss/ip-watch:latest              # Docker Hub (mirror)
+```
+
 ```yaml
 # docker-compose.yml
 services:
@@ -552,3 +602,13 @@ PR, and keep `gofmt`/`go vet` clean.
 ## License
 
 [MIT](LICENSE) © Rez Moss
+
+## Star History
+
+<a href="https://star-history.com/#rezmoss/ip-watch&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=rezmoss/ip-watch&type=Date&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=rezmoss/ip-watch&type=Date" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=rezmoss/ip-watch&type=Date" />
+  </picture>
+</a>
