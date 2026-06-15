@@ -54,7 +54,6 @@ archives:
     files:
       - README.md
       - LICENSE
-      - PLAN.md
       - deploy/ip-watch.service
       - deploy/install.sh
 

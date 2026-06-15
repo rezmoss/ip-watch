@@ -2,7 +2,7 @@
 
 # ip-watch
 
-**Keep cloud-provider IP ranges applied to your webserver and firewall, automatically and safely.**
+**Keep cloud-provider IP ranges applied to your webserver and firewall, on a daily schedule with safe rollback.**
 
 [![CI](https://github.com/rezmoss/ip-watch/actions/workflows/ci.yml/badge.svg)](https://github.com/rezmoss/ip-watch/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/rezmoss/ip-watch?sort=semver)](https://github.com/rezmoss/ip-watch/releases/latest)
@@ -31,10 +31,10 @@ added target "cf" (allow, nginx, cloudflare)
 ]
 ```
 
-> **The pitch:** *"I run nginx behind Cloudflare and want only Cloudflare to reach it."*
+> **Scenario:** you run nginx behind Cloudflare and want only Cloudflare to reach it.
 > Pick `cloudflare` → `allow`. ip-watch detects nginx, wires the rules in, validates with `nginx -t`,
-> reloads, and keeps the list fresh daily. If anything fails its own validator, your config is rolled back
-> byte-for-byte and the live service is never touched.
+> reloads, and keeps the list fresh daily. If validation fails, ip-watch restores your config
+> byte-for-byte and leaves the live service running.
 
 <!-- To add a demo GIF later, record it with charmbracelet/vhs and drop it here:
      <p align="center"><img src="docs/demo.gif" alt="ip-watch applying Cloudflare ranges to nginx"></p> -->
@@ -64,10 +64,10 @@ added target "cf" (allow, nginx, cloudflare)
 ## Why ip-watch
 
 Cloud and CDN providers publish their IP ranges, and those lists change. Keeping a webserver or firewall
-in sync with them is a chore people usually solve with a fragile cron job that `curl`s a list and rewrites a
-config with no validation. One malformed line or a failed reload, and the site is down.
+in sync is a chore you usually solve with a fragile cron job that `curl`s a list and rewrites a
+config with no validation. One malformed line or a failed reload takes the site down.
 
-ip-watch is the set-and-forget version of that job, with guardrails:
+ip-watch does the same job with guardrails:
 
 - **It validates before it reloads.** Config engines run `nginx -t` / `caddy validate` / `apachectl -t` /
   `haproxy -c`; nftables loads atomically after a dry `nft -c`. A change that fails is rolled back, not shipped.
@@ -110,14 +110,14 @@ ip-watch enforces ranges at one of two layers. Pick whichever fits where your tr
 | **iptables** | Firewall (ipset)| atomic set swap   | ⚠️ best-effort | re-run converges | — |
 | **ufw**      | Firewall        | status precheck   | ⚠️ best-effort | re-run converges | — |
 
-> **Safe-apply guarantees are not uniform.** The four **config engines** and **nftables** are fully
+> **Safe-apply guarantees are not uniform.** The four **config engines** and **nftables** are
 > transactional: a failed validation or reload restores the previous state and the live service keeps running
 > a config that passes its own checker. **iptables/ufw** run idempotent scripts (re-running converges to the
 > desired state) but have no atomic apply, so a mid-script failure can leave rules partially changed. Prefer
 > **nftables** for large rule sets or strict atomicity.
 
 The web UI (Vue 3 + Tailwind) and its libraries are **vendored and embedded** into the binary via `go:embed`.
-No CDN, no Node build step, works fully offline.
+No CDN, no Node build step, works offline.
 
 ## Supported providers
 
@@ -177,7 +177,7 @@ Use the generic binary tarball below or [build from source](#build--test). (An A
 </details>
 
 <details>
-<summary><b>Any distro — binary tarball + systemd installer</b></summary>
+<summary><b>Any distro: binary tarball + systemd installer</b></summary>
 
 ```sh
 # Download ip-watch_<version>_linux_x86_64.tar.gz from the latest release, then:
@@ -221,7 +221,7 @@ ssh -L 8080:127.0.0.1:8080 user@your-server   # then open http://127.0.0.1:8080
 
 ## Quick start
 
-Everything below works headlessly from the CLI. (The web UI does the same things, if you prefer a form.)
+Everything below runs from the CLI. (The web UI does the same things, if you prefer a form.)
 
 ```sh
 # 1. What can ip-watch manage on this host?
@@ -314,7 +314,7 @@ ip-watch metrics | grep failures     # Prometheus text, no server needed
 ip-watch settings -webhook https://hooks.slack.com/services/XXX   # then: notify-test
 ```
 
-> Global flags (currently just `-config <path>`, also via `$IPWATCH_CONFIG`) go **before** the command;
+> Global flags (currently `-config <path>`, also via `$IPWATCH_CONFIG`) go **before** the command;
 > command-specific flags go **after** it.
 
 ## Configuration
@@ -388,7 +388,7 @@ Config lives at `/etc/ip-watch/config.json` (auto-created on install). You can e
 > range or `admin_allow_ips`. Whitelisting a management port (22, 3389, database ports…) is rejected unless you
 > set `firewall.allow_admin_ports: true`. For **ufw**, allow mode only enforces when the default incoming policy
 > is `deny`; ip-watch refuses to apply otherwise. Only the listed ports are policed, so SSH and other services
-> are untouched unless you explicitly add their ports.
+> are untouched unless you add their ports.
 
 ## How safe-apply works
 
@@ -416,7 +416,7 @@ fetch CIDRs ─▶ render managed rules ─▶ inject the include (idempotent ma
 ```
 
 Re-applies are idempotent: the prior managed block is stripped and rewritten, never duplicated.
-`uninstall`/`rm` reverses it cleanly, removing the include and the managed file.
+`uninstall`/`rm` reverses it, removing the include and the managed file.
 
 ## Operations
 
@@ -474,7 +474,7 @@ volumes:
 
 The image binds `0.0.0.0`, so it **requires** auth (compose fails fast without `IPWATCH_AUTH_PASSWORD`). The
 Docker transport discovers a sibling webserver container, copies the managed include in over the archive API,
-runs the engine's validator, and reloads via `docker exec` — all without touching the host.
+runs the engine's validator, and reloads via `docker exec`, all without touching the host.
 
 ## Build & test
 
@@ -523,7 +523,7 @@ or don't expose it at all.
 ## Contributing
 
 Issues and pull requests are welcome. Run `make test` (and `make e2e` if Docker is available) before opening a
-PR, and keep `gofmt`/`go vet` clean. See [PLAN.md](PLAN.md) for the design and roadmap.
+PR, and keep `gofmt`/`go vet` clean.
 
 ## License
 
