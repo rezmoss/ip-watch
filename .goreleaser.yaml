@@ -61,6 +61,46 @@ archives:
 checksum:
   name_template: "checksums.txt"
 
+# GPG-sign checksums.txt (detached .sig). Verify with deploy/ip-watch-signing-key.asc:
+#   gpg --import ip-watch-signing-key.asc && gpg --verify checksums.txt.sig checksums.txt
+# The signing key is imported into the runner keyring by the release workflow.
+signs:
+  - id: checksums
+    cmd: gpg
+    artifacts: checksum
+    signature: "${artifact}.sig"
+    args:
+      - "--batch"
+      - "--yes"
+      - "--pinentry-mode"
+      - "loopback"
+      - "--local-user"
+      - "{{ .Env.GPG_FINGERPRINT }}"
+      - "--output"
+      - "${signature}"
+      - "--detach-sign"
+      - "${artifact}"
+
+# Software Bill of Materials (CycloneDX via syft) for each archive — supply-chain
+# transparency. Produces ip-watch_<ver>_linux_<arch>.tar.gz.sbom.json per archive.
+sboms:
+  - id: archive
+    artifacts: archive
+
+# Keyless (Sigstore/OIDC) signatures for the published container images. No key to
+# manage — uses the workflow's GitHub OIDC identity (needs id-token: write).
+#   cosign verify ghcr.io/rezmoss/ip-watch:<tag> \
+#     --certificate-identity-regexp 'https://github.com/rezmoss/ip-watch' \
+#     --certificate-oidc-issuer https://token.actions.githubusercontent.com
+docker_signs:
+  - cmd: cosign
+    artifacts: images
+    output: true
+    args:
+      - "sign"
+      - "--yes"
+      - "${artifact}"
+
 # Linux native packages so users can install with their distro package manager
 # (apt / dnf / yum / zypper / apk). Each package ships the binary, the systemd
 # unit, and a post-install hook that seeds the config + starts the service.
@@ -96,10 +136,15 @@ nfpms:
       postinstall: deploy/scripts/postinstall.sh
       preremove: deploy/scripts/preremove.sh
       postremove: deploy/scripts/postremove.sh
+    # Sign the .rpm with the release GPG key — dnf/rpm verify it (rpm --checksig).
+    # GPG_KEY_PATH points at the exported private key written by the workflow.
+    rpm:
+      signature:
+        key_file: "{{ .Env.GPG_KEY_PATH }}"
 
-# Multi-arch container images pushed to GitHub Container Registry (ghcr.io).
-# Uses the workflow's GITHUB_TOKEN — no extra secrets needed. To also push to
-# Docker Hub, add another registry to the tags + a docker login step.
+# Multi-arch container images pushed to BOTH GitHub Container Registry (ghcr.io,
+# via GITHUB_TOKEN) and Docker Hub (docker.io/rezmoss, via DOCKERHUB_TOKEN). The
+# workflow logs into both registries before this runs.
 dockers:
   - id: ip-watch-amd64
     goos: linux
@@ -109,6 +154,8 @@ dockers:
     image_templates:
       - "ghcr.io/rezmoss/ip-watch:{{ .Version }}-amd64"
       - "ghcr.io/rezmoss/ip-watch:latest-amd64"
+      - "docker.io/rezmoss/ip-watch:{{ .Version }}-amd64"
+      - "docker.io/rezmoss/ip-watch:latest-amd64"
     build_flag_templates:
       - "--platform=linux/amd64"
       - "--label=org.opencontainers.image.title={{ .ProjectName }}"
@@ -124,6 +171,8 @@ dockers:
     image_templates:
       - "ghcr.io/rezmoss/ip-watch:{{ .Version }}-arm64"
       - "ghcr.io/rezmoss/ip-watch:latest-arm64"
+      - "docker.io/rezmoss/ip-watch:{{ .Version }}-arm64"
+      - "docker.io/rezmoss/ip-watch:latest-arm64"
     build_flag_templates:
       - "--platform=linux/arm64"
       - "--label=org.opencontainers.image.title={{ .ProjectName }}"
@@ -141,6 +190,14 @@ docker_manifests:
     image_templates:
       - "ghcr.io/rezmoss/ip-watch:latest-amd64"
       - "ghcr.io/rezmoss/ip-watch:latest-arm64"
+  - name_template: "docker.io/rezmoss/ip-watch:{{ .Version }}"
+    image_templates:
+      - "docker.io/rezmoss/ip-watch:{{ .Version }}-amd64"
+      - "docker.io/rezmoss/ip-watch:{{ .Version }}-arm64"
+  - name_template: "docker.io/rezmoss/ip-watch:latest"
+    image_templates:
+      - "docker.io/rezmoss/ip-watch:latest-amd64"
+      - "docker.io/rezmoss/ip-watch:latest-arm64"
 
 # Group commits into the release notes by Conventional Commit type
 # (feat -> Added, fix -> Fixed, …). Commits that match `exclude` are dropped.
@@ -224,8 +281,8 @@ brews:
     license: "MIT"
     skip_upload: auto
     commit_author:
-      name: goreleaser-bot
-      email: 1217663+rezmoss@users.noreply.github.com
+      name: rezmoss
+      email: 178949074+rezmoss@users.noreply.github.com
     install: |
       bin.install "ip-watch"
     test: |
@@ -236,9 +293,12 @@ brews:
       the .deb/.rpm/.apk or: curl -fsSL https://raw.githubusercontent.com/rezmoss/ip-watch/main/install.sh | sudo sh
       Get started with: ip-watch help
 
-# AUR (Arch User Repository) — prebuilt-binary package. ENABLED IN STEP #8 once the
-# AUR_KEY secret is set and its public key is registered on the AUR account; left
-# commented until then so a release can't fail on a missing key.
+# AUR (Arch User Repository) — prebuilt-binary package. READY: the PKGBUILD config
+# below is complete and verified (goreleaser snapshot), the AUR_KEY secret is set,
+# and the deploy public key is generated. It is commented out ONLY because pushing
+# requires an AUR account with that key registered, and AUR new-account registration
+# is currently disabled upstream. To enable: register the key (printed during setup)
+# on an AUR account, then uncomment this block — the next tag publishes ip-watch-bin.
 #   yay -S ip-watch-bin
 # aurs:
 #   - name: ip-watch-bin
