@@ -55,6 +55,7 @@ archives:
       - README.md
       - LICENSE
       - deploy/ip-watch.service
+      - deploy/ip-watch.packaged.service
       - deploy/install.sh
 
 checksum:
@@ -204,27 +205,59 @@ release:
 source:
   enabled: true
 
-# --- Optional channels, ready to enable once their prerequisites exist ---
-# Each needs a one-time setup (a tap repo, an AUR SSH key, registry secrets);
-# they're commented so the first tag releases cleanly with only GITHUB_TOKEN.
-# See the post-release checklist for what to provision.
-#
-# brews:
-#   - name: ip-watch
-#     repository:
-#       owner: rezmoss
-#       name: homebrew-tap        # create github.com/rezmoss/homebrew-tap first
-#     homepage: https://github.com/rezmoss/ip-watch
-#     description: Keep cloud-provider IP ranges applied to your webserver/firewall
-#     license: MIT
-#     skip_upload: auto           # don't push for prereleases
-#
+# Homebrew formula pushed to github.com/rezmoss/homebrew-tap (Linuxbrew — the tool
+# is Linux-only). Needs a cross-repo token (HOMEBREW_TAP_TOKEN secret) because the
+# workflow's GITHUB_TOKEN can only write to the ip-watch repo itself.
+#   brew install rezmoss/tap/ip-watch
+brews:
+  - name: ip-watch
+    ids:
+      - ip-watch
+    repository:
+      owner: rezmoss
+      name: homebrew-tap
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/rezmoss/ip-watch"
+    description: "Keep cloud-provider IP ranges applied to your webserver/firewall"
+    license: "MIT"
+    skip_upload: auto
+    commit_author:
+      name: goreleaser-bot
+      email: 1217663+rezmoss@users.noreply.github.com
+    install: |
+      bin.install "ip-watch"
+    test: |
+      assert_match "ip-watch", shell_output("#{bin}/ip-watch version")
+    caveats: |
+      ip-watch manages Linux webservers/firewalls via a systemd service and runs
+      as root. This formula installs the binary only — for the managed service use
+      the .deb/.rpm/.apk or: curl -fsSL https://raw.githubusercontent.com/rezmoss/ip-watch/main/install.sh | sudo sh
+      Get started with: ip-watch help
+
+# AUR (Arch User Repository) — prebuilt-binary package. ENABLED IN STEP #8 once the
+# AUR_KEY secret is set and its public key is registered on the AUR account; left
+# commented until then so a release can't fail on a missing key.
+#   yay -S ip-watch-bin
 # aurs:
 #   - name: ip-watch-bin
-#     homepage: https://github.com/rezmoss/ip-watch
-#     description: Keep cloud-provider IP ranges applied to your webserver/firewall
+#     ids:
+#       - ip-watch
+#     homepage: "https://github.com/rezmoss/ip-watch"
+#     description: "Keep cloud-provider IP ranges applied to your webserver/firewall"
 #     maintainers:
-#       - Rez Moss <rez@cloudaid.net>
-#     license: MIT
+#       - "Rez Moss <rez@cloudaid.net>"
+#     license: "MIT"
 #     private_key: "{{ .Env.AUR_KEY }}"
-#     git_url: ssh://aur@aur.archlinux.org/ip-watch-bin.git
+#     git_url: "ssh://aur@aur.archlinux.org/ip-watch-bin.git"
+#     skip_upload: auto
+#     provides:
+#       - ip-watch
+#     conflicts:
+#       - ip-watch
+#     package: |-
+#       install -Dm755 "./ip-watch" "${pkgdir}/usr/bin/ip-watch"
+#       install -Dm644 "./deploy/ip-watch.packaged.service" "${pkgdir}/usr/lib/systemd/system/ip-watch.service"
+#       install -Dm644 "./LICENSE" "${pkgdir}/usr/share/licenses/ip-watch/LICENSE"
+#       install -Dm644 "./README.md" "${pkgdir}/usr/share/doc/ip-watch/README.md"
