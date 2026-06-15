@@ -1,0 +1,55 @@
+# ip-watch Snap — TEMPLATE / ASSESSMENT, intentionally NOT wired into releases.
+#
+# Why this is not a recommended channel:
+#   ip-watch edits host config under /etc (nginx/caddy/apache/haproxy), drives
+#   `systemctl reload`, runs `nft`/`iptables`/`ufw`, and may use the Docker socket
+#   — all as root. Snap STRICT confinement sandboxes a snap away from exactly those
+#   things (no host /etc, no host service control, no arbitrary system binaries), so
+#   ip-watch cannot run usefully under strict confinement.
+#
+#   The only option that works is `confinement: classic` (full host access, like a
+#   normally-installed binary). Classic snaps require MANUAL review and approval by
+#   the Snap Store team and are reserved for specific categories — a daemon that
+#   rewrites webserver/firewall config is unlikely to be granted, and even if it
+#   were, it offers nothing over the native .deb/.rpm/apt-repo on the same systems.
+#
+# Recommendation: on Snap-based distros (Ubuntu), use the .deb, the apt repo
+# (https://rezmoss.github.io/ip-watch/deb), or the one-line installer instead.
+# Flatpak is even less suitable (stronger desktop sandbox, no system-daemon model).
+#
+# This file is kept only so the decision is documented and reproducible. To pursue
+# it anyway: `snapcraft` (needs LXD/multipass), then request classic confinement.
+
+name: ip-watch
+base: core24
+adopt-info: ip-watch
+summary: Keep cloud-provider IP ranges applied to your webserver/firewall
+description: |
+  ip-watch fetches cloud-provider IP ranges and safely applies allow/deny rules to
+  nginx/caddy/apache/haproxy or nftables/iptables/ufw, validating and reloading, and
+  refreshing daily. Linux only; runs as root.
+license: MIT
+grade: stable
+# REQUIRED — strict confinement cannot express host config/service/firewall edits.
+confinement: classic
+
+platforms:
+  amd64:
+  arm64:
+
+parts:
+  ip-watch:
+    plugin: go
+    source: .
+    build-snaps:
+      - go/latest/stable
+    override-pull: |
+      craftctl default
+      craftctl set version="$(git describe --tags --always | sed 's/^v//')"
+    override-build: |
+      go build -trimpath -ldflags "-s -w -X main.version=$(craftctl get version)" \
+        -o "$CRAFT_PART_INSTALL/bin/ip-watch" ./cmd/ip-watch
+
+apps:
+  ip-watch:
+    command: bin/ip-watch

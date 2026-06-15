@@ -205,13 +205,28 @@ sudo "$(go env GOPATH)/bin/ip-watch" serve   # or wire up your own systemd unit
 </details>
 
 <details>
+<summary><b>Nix (flakes)</b></summary>
+
+```sh
+nix run github:rezmoss/ip-watch -- help          # run without installing
+nix profile install github:rezmoss/ip-watch      # install into your profile
+```
+Or add it as a flake input and use `inputs.ip-watch.packages.${system}.default`.
+</details>
+
+<details>
 <summary><b>Docker (for managing sibling containers)</b></summary>
 
 ```sh
-docker pull ghcr.io/rezmoss/ip-watch:latest
+docker pull ghcr.io/rezmoss/ip-watch:latest        # or: docker.io/rezmoss/ip-watch:latest
 ```
 See the [Docker](#docker) section for compose and the daemon-socket setup.
 </details>
+
+> **Not packaged for Snap/Flatpak by design.** ip-watch runs as root and edits host
+> config (`/etc/nginx`, …), `systemctl`, and firewall rules — work that Snap/Flatpak
+> sandboxes block. Use the `.deb`/`.rpm`, the apt/yum repo, or the installer instead
+> (see [`deploy/snap/snapcraft.yaml`](deploy/snap/snapcraft.yaml) for the rationale).
 
 After a package install, the service is already running on `127.0.0.1:8080` with a generated password. Find it with:
 
