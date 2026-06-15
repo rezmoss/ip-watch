@@ -43,16 +43,25 @@ JSON
   echo
 fi
 
-echo "Installing systemd unit -> $UNIT"
-install -m 0644 "$HERE/ip-watch.service" "$UNIT"
-
-systemctl daemon-reload
-systemctl enable --now ip-watch.service
-
-echo
-echo "ip-watch is running. The UI binds loopback (127.0.0.1:8080) by default."
-echo "On this host:        http://127.0.0.1:8080"
-echo "From your machine:   ssh -L 8080:127.0.0.1:8080 $(whoami)@<this-host>  then open http://127.0.0.1:8080"
-echo "                     (or set a non-loopback \"listen\" + auth in the config to expose it directly)"
-echo "Edit config:         $CONF_DIR/config.json"
-echo "Logs:                journalctl -u ip-watch -f"
+if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+  echo "Installing systemd unit -> $UNIT"
+  install -m 0644 "$HERE/ip-watch.service" "$UNIT"
+  systemctl daemon-reload
+  systemctl enable --now ip-watch.service
+  echo
+  echo "ip-watch is running. The UI binds loopback (127.0.0.1:8080) by default."
+  echo "On this host:        http://127.0.0.1:8080"
+  echo "From your machine:   ssh -L 8080:127.0.0.1:8080 $(whoami)@<this-host>  then open http://127.0.0.1:8080"
+  echo "                     (or set a non-loopback \"listen\" + auth in the config to expose it directly)"
+  echo "Edit config:         $CONF_DIR/config.json"
+  echo "Logs:                journalctl -u ip-watch -f"
+else
+  # No systemd (container, WSL2 without systemd, chroot): install the unit file
+  # for later, but don't try to start a service that can't run here.
+  echo "Installing systemd unit -> $UNIT (not started — systemd not detected)"
+  install -m 0644 "$HERE/ip-watch.service" "$UNIT"
+  echo
+  echo "Binary + config installed, but no init system was detected to run the service."
+  echo "Start it manually:   ip-watch serve"
+  echo "Edit config:         $CONF_DIR/config.json"
+fi

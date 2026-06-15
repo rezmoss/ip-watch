@@ -141,6 +141,15 @@ ip-watch is a Linux tool (it manages Linux webservers, firewalls, and systemd). 
 armv6, armv7, 386, riscv64, ppc64le, and s390x**. Pick whichever matches your distro; every method installs the
 same `ip-watch` binary plus a systemd unit, and seeds a config with a **random admin password**.
 
+**Quickest — one line (auto-detects arch, verifies checksum, installs the service):**
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/rezmoss/ip-watch/main/install.sh | sudo sh
+```
+
+Re-run it anytime to **upgrade in place** (your config and admin password are kept). Pin a version with
+`… | sudo sh -s -- v1.2.3`. Prefer your distro's package manager? Use one of the options below.
+
 <details open>
 <summary><b>Debian / Ubuntu (and derivatives: Mint, Pop!_OS, Kali, Raspbian)</b></summary>
 

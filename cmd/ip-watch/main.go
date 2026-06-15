@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"syscall"
@@ -30,8 +31,17 @@ import (
 	"github.com/rezmoss/ip-watch/internal/web"
 )
 
-// set via -ldflags
+// set via -ldflags; falls back to the module version so `go install …@vX` reports it too
 var version = "dev"
+
+func init() {
+	if version != "dev" {
+		return // stamped by the release build
+	}
+	if bi, ok := debug.ReadBuildInfo(); ok && bi.Main.Version != "" && bi.Main.Version != "(devel)" {
+		version = bi.Main.Version
+	}
+}
 
 // exit non-zero, no err line
 var errExitSilent = errors.New("__silent__")
