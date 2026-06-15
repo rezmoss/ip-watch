@@ -1,0 +1,28 @@
+# Run ip-watch as a container that manages sibling webserver containers.
+#
+# The Docker transport reaches a webserver container over the daemon socket:
+# ip-watch discovers it, copies the managed include in, runs `nginx -t`, and
+# reloads it. Pick "Docker container" in the UI and select the target.
+#
+# To manage a *host-installed* nginx, prefer the native binary (deploy/install.sh).
+services:
+  ip-watch:
+    build: .
+    image: ip-watch:latest
+    container_name: ip-watch
+    ports:
+      - "8080:8080"
+    environment:
+      # Required: the container binds 0.0.0.0, so ip-watch demands auth.
+      # Compose fails fast if IPWATCH_AUTH_PASSWORD isn't set (no working default).
+      - IPWATCH_AUTH_USERNAME=${IPWATCH_AUTH_USERNAME:-admin}
+      - IPWATCH_AUTH_PASSWORD=${IPWATCH_AUTH_PASSWORD:?set IPWATCH_AUTH_PASSWORD in your environment or .env}
+    volumes:
+      - ip-watch-data:/data
+      # Required for the Docker transport (discover + reload sibling containers).
+      # The socket is root-equivalent; mount it only if you use this transport.
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+
+volumes:
+  ip-watch-data:

@@ -1,0 +1,473 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ip-watch</title>
+<script src="/vendor/tailwind.browser.js"></script>
+<script src="/vendor/vue.global.prod.js"></script>
+<style type="text/tailwindcss">
+  @theme {
+    --color-ink: #0a0e14;
+    --color-panel: #11161f;
+    --color-edge: #1f2733;
+  }
+</style>
+<style>
+  html,body{background:#0a0e14;color:#e6edf3;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+  [v-cloak]{display:none}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:#283041;border-radius:6px}
+  ::-webkit-scrollbar-track{background:transparent}
+</style>
+</head>
+<body class="min-h-screen antialiased">
+<div id="app" v-cloak>
+
+  <!-- top bar -->
+  <header class="sticky top-0 z-20 border-b border-edge/80 bg-ink/80 backdrop-blur">
+    <div class="mx-auto flex max-w-6xl items-center justify-between px-5 py-3">
+      <div class="flex items-center gap-3">
+        <div class="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-sky-400 to-indigo-500 shadow-lg shadow-indigo-500/20">
+          <svg class="h-5 w-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+        </div>
+        <div>
+          <h1 class="text-lg font-semibold leading-none">ip&#8209;watch</h1>
+          <p class="mt-0.5 text-xs text-slate-400">cloud-provider IP allow / deny, auto-applied to your webserver</p>
+        </div>
+      </div>
+      <a :href="repos.tool" target="_blank" rel="noopener"
+         class="inline-flex items-center gap-2 rounded-lg border border-edge bg-panel px-3 py-2 text-sm text-slate-300 transition hover:border-slate-500 hover:text-white">
+        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.37.5 0 5.78 0 12.29c0 5.2 3.44 9.6 8.21 11.16.6.11.82-.25.82-.57v-2c-3.34.71-4.04-1.58-4.04-1.58-.55-1.36-1.34-1.73-1.34-1.73-1.09-.73.08-.72.08-.72 1.2.08 1.84 1.21 1.84 1.21 1.07 1.8 2.81 1.28 3.5.98.11-.76.42-1.28.76-1.57-2.67-.3-5.47-1.31-5.47-5.83 0-1.29.47-2.34 1.24-3.17-.13-.3-.54-1.52.11-3.18 0 0 1.01-.32 3.3 1.21a11.6 11.6 0 0 1 6.01 0c2.29-1.53 3.3-1.21 3.3-1.21.65 1.66.24 2.88.12 3.18.77.83 1.23 1.88 1.23 3.17 0 4.53-2.81 5.53-5.49 5.82.43.37.81 1.1.81 2.22v3.29c0 .32.22.69.83.57A12.02 12.02 0 0 0 24 12.29C24 5.78 18.63.5 12 .5z"/></svg>
+        GitHub
+      </a>
+    </div>
+  </header>
+
+  <main class="mx-auto grid max-w-6xl gap-6 px-5 py-8 lg:grid-cols-5">
+
+    <!-- left: form -->
+    <section class="lg:col-span-2">
+      <div class="rounded-2xl border border-edge bg-panel p-5 shadow-xl shadow-black/20">
+        <h2 class="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400">{{ form.editing ? 'Edit target' : 'Add target' }}</h2>
+
+        <label class="mb-1 block text-xs text-slate-400">Providers <span class="text-slate-600">(pick one or more to merge)</span></label>
+        <div class="flex gap-2">
+          <select v-model="providerPick"
+            class="w-full rounded-lg border border-edge bg-ink px-3 py-2.5 text-sm outline-none transition focus:border-sky-500">
+            <option v-for="p in providers" :key="p.name" :value="p.name">{{ p.name }} &mdash; {{ p.total_cidrs.toLocaleString() }} CIDRs</option>
+          </select>
+          <button type="button" @click="addProvider"
+            class="shrink-0 rounded-lg border border-edge px-3 text-sm text-slate-300 transition hover:border-slate-500">Add</button>
+        </div>
+        <div v-if="form.providers.length" class="mt-2 flex flex-wrap gap-1.5">
+          <span v-for="p in form.providers" :key="p"
+            class="inline-flex items-center gap-1 rounded-full border border-sky-500/50 bg-sky-500/10 px-2.5 py-1 text-xs text-sky-200">
+            {{ p }}
+            <button type="button" @click="removeProvider(p)" class="text-sky-300 hover:text-white">&times;</button>
+          </span>
+        </div>
+        <p v-else class="mt-1.5 text-xs text-amber-400/80">No providers selected yet.</p>
+
+        <label class="mb-1 mt-4 block text-xs text-slate-400">Mode</label>
+        <div class="grid grid-cols-2 gap-2">
+          <button @click="form.mode='allow'" type="button"
+            :class="form.mode==='allow' ? 'border-emerald-500 bg-emerald-500/10 text-emerald-300' : 'border-edge text-slate-400 hover:border-slate-500'"
+            class="rounded-lg border px-3 py-2.5 text-sm font-medium transition">Allow (whitelist)</button>
+          <button @click="form.mode='deny'" type="button"
+            :class="form.mode==='deny' ? 'border-rose-500 bg-rose-500/10 text-rose-300' : 'border-edge text-slate-400 hover:border-slate-500'"
+            class="rounded-lg border px-3 py-2.5 text-sm font-medium transition">Deny (blocklist)</button>
+        </div>
+
+        <div class="mt-4 grid grid-cols-2 gap-3">
+          <div>
+            <label class="mb-1 block text-xs text-slate-400">Target ID</label>
+            <input v-model.trim="form.id" :disabled="form.editing" placeholder="web1"
+              class="w-full rounded-lg border border-edge bg-ink px-3 py-2.5 text-sm outline-none transition focus:border-sky-500 disabled:opacity-60">
+          </div>
+          <div>
+            <label class="mb-1 block text-xs text-slate-400">Engine</label>
+            <select v-model="form.engine" class="w-full rounded-lg border border-edge bg-ink px-3 py-2.5 text-sm outline-none focus:border-sky-500">
+              <option value="nginx">nginx</option>
+              <option value="caddy">caddy</option>
+              <option value="apache">apache</option>
+              <option value="haproxy">haproxy</option>
+              <option value="nftables">nftables (firewall)</option>
+              <option value="iptables">iptables (firewall)</option>
+              <option value="ufw">ufw (firewall)</option>
+            </select>
+          </div>
+        </div>
+
+        <label class="mb-1 mt-4 block text-xs text-slate-400">Transport</label>
+        <div class="grid grid-cols-2 gap-2">
+          <button @click="setTransport('local')" type="button"
+            :class="form.transport==='local' ? 'border-sky-500 bg-sky-500/10 text-sky-300' : 'border-edge text-slate-400 hover:border-slate-500'"
+            class="rounded-lg border px-3 py-2.5 text-sm font-medium transition">Host (local)</button>
+          <button @click="setTransport('docker')" type="button"
+            :class="form.transport==='docker' ? 'border-sky-500 bg-sky-500/10 text-sky-300' : 'border-edge text-slate-400 hover:border-slate-500'"
+            class="rounded-lg border px-3 py-2.5 text-sm font-medium transition">Docker container</button>
+        </div>
+
+        <div v-if="form.transport==='docker'" class="mt-3">
+          <div class="mb-1 flex items-center justify-between">
+            <label class="block text-xs text-slate-400">Container</label>
+            <button @click="loadDockerContainers" type="button" class="text-xs text-sky-400 transition hover:text-sky-300">Refresh</button>
+          </div>
+          <select v-model="form.container" class="w-full rounded-lg border border-edge bg-ink px-3 py-2.5 text-sm outline-none focus:border-sky-500">
+            <option value="" disabled>Select a container…</option>
+            <option v-for="c in dockerContainers" :key="c.id" :value="c.name">{{ c.name }} — {{ c.image }}<template v-if="c.engine"> ({{ c.engine }})</template></option>
+          </select>
+          <p v-if="dockerError" class="mt-1 text-xs text-rose-400">{{ dockerError }}</p>
+          <p v-else-if="!dockerContainers.length" class="mt-1 text-xs text-slate-500">No webserver containers found — is the Docker socket mounted?</p>
+          <p v-else class="mt-1 text-xs text-slate-500">Config paths below are <span class="text-slate-300">inside the container</span>.</p>
+        </div>
+
+        <!-- config-file engines -->
+        <template v-if="isConfigEngine">
+          <label class="mb-1 mt-4 block text-xs text-slate-400">{{ engineLabel }} config file <span class="text-slate-600">(blank = auto-detect)</span></label>
+          <input v-model.trim="form.file" :placeholder="configPlaceholder"
+            class="w-full rounded-lg border border-edge bg-ink px-3 py-2.5 text-sm outline-none focus:border-sky-500">
+
+          <template v-if="showSelector">
+            <label class="mb-1 mt-4 block text-xs text-slate-400">{{ selectorLabel }} <span class="text-slate-600">(blank = first block)</span></label>
+            <input v-model.trim="form.selector" :placeholder="selectorPlaceholder"
+              class="w-full rounded-lg border border-edge bg-ink px-3 py-2.5 text-sm outline-none focus:border-sky-500">
+          </template>
+        </template>
+
+        <!-- firewall engine -->
+        <template v-else>
+          <label class="mb-1 mt-4 block text-xs text-slate-400">Ports <span class="text-slate-600">(only these TCP ports are policed; SSH stays open)</span></label>
+          <input v-model.trim="form.ports" placeholder="80, 443"
+            class="w-full rounded-lg border border-edge bg-ink px-3 py-2.5 text-sm outline-none focus:border-sky-500">
+        </template>
+
+        <!-- allow-mode whitelist warning + admin allowlist -->
+        <div v-if="form.mode==='allow'" class="mt-4">
+          <div v-if="!isConfigEngine" class="mb-3 rounded-lg border border-amber-500/50 bg-amber-500/10 px-3 py-2.5 text-xs text-amber-200">
+            <strong>Whitelist:</strong> traffic to these ports will be <strong>blocked</strong> unless it
+            matches the selected providers or your admin allow IPs below. Add your own IP so you don't lock yourself out.
+          </div>
+          <label class="mb-1 block text-xs text-slate-400">Admin allow IPs <span class="text-slate-600">(always permitted, comma-separated CIDRs)</span></label>
+          <input v-model.trim="form.admin_allow_ips" placeholder="203.0.113.5/32, 198.51.100.0/24"
+            class="w-full rounded-lg border border-edge bg-ink px-3 py-2.5 text-sm outline-none focus:border-sky-500">
+          <label v-if="!isConfigEngine" class="mt-3 flex cursor-pointer items-center justify-between rounded-lg border border-edge bg-ink/60 px-3 py-2.5">
+            <span class="text-sm">Allow management ports <span class="text-xs text-slate-500">(police SSH/RDP/DB ports — guards against lockout)</span></span>
+            <input type="checkbox" v-model="form.allow_admin_ports" class="peer sr-only">
+            <span class="relative h-5 w-9 rounded-full bg-slate-700 transition peer-checked:bg-sky-500 after:absolute after:left-0.5 after:top-0.5 after:h-4 after:w-4 after:rounded-full after:bg-white after:transition peer-checked:after:translate-x-4"></span>
+          </label>
+        </div>
+
+        <div class="mt-4 space-y-2">
+          <label v-if="showRealIP" class="flex cursor-pointer items-center justify-between rounded-lg border border-edge bg-ink/60 px-3 py-2.5">
+            <span class="text-sm">Recover real client IP <span class="text-xs text-slate-500">(recommended behind Cloudflare)</span></span>
+            <input type="checkbox" v-model="form.real_ip" class="peer sr-only">
+            <span class="relative h-5 w-9 rounded-full bg-slate-700 transition peer-checked:bg-sky-500 after:absolute after:left-0.5 after:top-0.5 after:h-4 after:w-4 after:rounded-full after:bg-white after:transition peer-checked:after:translate-x-4"></span>
+          </label>
+          <label class="flex cursor-pointer items-center justify-between rounded-lg border border-edge bg-ink/60 px-3 py-2.5">
+            <span class="text-sm">Enabled</span>
+            <input type="checkbox" v-model="form.enabled" class="peer sr-only">
+            <span class="relative h-5 w-9 rounded-full bg-slate-700 transition peer-checked:bg-sky-500 after:absolute after:left-0.5 after:top-0.5 after:h-4 after:w-4 after:rounded-full after:bg-white after:transition peer-checked:after:translate-x-4"></span>
+          </label>
+        </div>
+
+        <div class="mt-5 flex gap-2">
+          <button @click="saveTarget" :disabled="busy"
+            class="flex-1 rounded-lg bg-gradient-to-br from-sky-500 to-indigo-500 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-500/20 transition hover:brightness-110 disabled:opacity-50">
+            {{ form.editing ? 'Update target' : 'Add target' }}
+          </button>
+          <button v-if="form.editing" @click="resetForm" type="button"
+            class="rounded-lg border border-edge px-4 py-2.5 text-sm text-slate-300 transition hover:border-slate-500">Cancel</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- right: targets + status -->
+    <section class="space-y-6 lg:col-span-3">
+
+      <div class="rounded-2xl border border-edge bg-panel p-5 shadow-xl shadow-black/20">
+        <div class="mb-4 flex items-center justify-between">
+          <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Targets</h2>
+          <div class="flex gap-2">
+            <button @click="apply(true)" :disabled="busy"
+              class="rounded-lg border border-edge px-3 py-2 text-sm text-slate-300 transition hover:border-slate-500 disabled:opacity-50">Dry run</button>
+            <button @click="apply(false)" :disabled="busy"
+              class="rounded-lg bg-emerald-500/90 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-50">
+              {{ busy ? 'Working…' : 'Apply now' }}</button>
+          </div>
+        </div>
+
+        <div v-if="!targets.length" class="rounded-xl border border-dashed border-edge px-4 py-10 text-center text-sm text-slate-500">
+          No targets yet. Pick a provider on the left and add one.
+        </div>
+
+        <div v-else class="space-y-2">
+          <div v-for="t in targets" :key="t.id"
+            class="flex items-center gap-3 rounded-xl border border-edge bg-ink/50 px-4 py-3">
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2">
+                <span class="font-medium">{{ t.id }}</span>
+                <span :class="t.mode==='allow' ? 'border-emerald-500/60 text-emerald-300' : 'border-rose-500/60 text-rose-300'"
+                  class="rounded-full border px-2 py-0.5 text-[11px] uppercase tracking-wide">{{ t.mode }}</span>
+                <span class="rounded-full border border-edge px-2 py-0.5 text-[11px] text-slate-400">{{ t.engine }}</span>
+                <span class="rounded-full border border-edge px-2 py-0.5 text-[11px] text-slate-500">{{ t.transport==='docker' ? 'docker:'+(t.docker && t.docker.container || '?') : 'host' }}</span>
+              </div>
+              <p class="mt-0.5 truncate text-xs text-slate-500">
+                {{ (t.providers && t.providers.length ? t.providers.join(' + ') : t.provider) }}<template v-if="t.config && t.config.selector"> &middot; {{ t.config.selector }}</template><template v-if="t.config && t.config.real_ip"> &middot; real-ip</template>
+              </p>
+            </div>
+            <span :class="t.enabled ? 'text-emerald-400' : 'text-slate-600'" class="text-xs">{{ t.enabled ? 'enabled' : 'disabled' }}</span>
+            <button @click="edit(t)" class="rounded-md p-2 text-slate-400 transition hover:bg-edge hover:text-white" title="Edit">
+              <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+            </button>
+            <button @click="uninstall(t.id)" class="rounded-md p-2 text-slate-400 transition hover:bg-amber-500/15 hover:text-amber-300" title="Uninstall (remove applied rules, keep target)">
+              <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64A9 9 0 1 1 5.64 6.64"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
+            </button>
+            <button @click="del(t.id)" class="rounded-md p-2 text-slate-400 transition hover:bg-rose-500/15 hover:text-rose-300" title="Delete">
+              <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="rounded-2xl border border-edge bg-panel p-5 shadow-xl shadow-black/20">
+        <h2 class="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400">Notifications</h2>
+        <label class="mb-1 block text-xs text-slate-400">Webhook URL <span class="text-slate-600">(Slack/Mattermost or any JSON endpoint)</span></label>
+        <input v-model.trim="settings.webhook" placeholder="https://hooks.slack.com/services/…"
+          class="w-full rounded-lg border border-edge bg-ink px-3 py-2.5 text-sm outline-none focus:border-sky-500">
+        <label class="check mt-3 flex cursor-pointer items-center gap-2 text-sm">
+          <input type="checkbox" v-model="settings.always" class="h-4 w-4">
+          <span>Notify even when a scheduled run changed nothing</span>
+        </label>
+        <div class="mt-4 flex gap-2">
+          <button @click="saveSettings" class="rounded-lg bg-gradient-to-br from-sky-500 to-indigo-500 px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110">Save</button>
+          <button @click="testWebhook" class="rounded-lg border border-edge px-4 py-2 text-sm text-slate-300 transition hover:border-slate-500">Send test</button>
+        </div>
+      </div>
+
+      <div class="rounded-2xl border border-edge bg-panel p-5 shadow-xl shadow-black/20">
+        <h2 class="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400">Last run</h2>
+        <p v-if="!results.length" class="text-sm text-slate-500">No runs yet. Use <span class="text-slate-300">Dry run</span> to preview safely.</p>
+        <div v-else class="space-y-2">
+          <div v-for="r in results" :key="r.target_id" class="rounded-xl border border-edge bg-ink/50 p-3">
+            <div class="flex items-center gap-2">
+              <span :class="r.ok ? 'bg-emerald-500/15 text-emerald-300' : 'bg-rose-500/15 text-rose-300'" class="rounded-full px-2 py-0.5 text-[11px] font-semibold">{{ r.ok ? 'OK' : 'FAILED' }}</span>
+              <span class="font-medium">{{ r.target_id }}</span>
+              <span class="text-xs text-slate-500">{{ r.provider }}</span>
+              <span v-if="r.ranges" class="ml-auto text-xs text-slate-500">{{ r.ranges.toLocaleString() }} ranges</span>
+            </div>
+            <p class="mt-1.5 text-sm" :class="r.ok ? 'text-slate-300' : 'text-rose-300'">{{ r.message }}</p>
+            <pre v-if="r.validate" class="mt-2 overflow-auto rounded-lg bg-ink p-2 text-[11px] text-slate-400">{{ r.validate }}</pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="rounded-2xl border border-edge bg-panel p-5 shadow-xl shadow-black/20">
+        <div class="mb-4 flex items-center justify-between">
+          <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400">History</h2>
+          <a href="/metrics" target="_blank" class="text-xs text-sky-400 transition hover:text-sky-300">/metrics →</a>
+        </div>
+        <p v-if="!history.length" class="text-sm text-slate-500">No recorded changes or failures yet.</p>
+        <div v-else class="space-y-1.5">
+          <div v-for="(h, i) in history.slice(0, 12)" :key="i" class="flex items-center gap-2 text-xs">
+            <span :class="h.ok ? 'text-emerald-400' : 'text-rose-400'">{{ h.ok ? '●' : '✕' }}</span>
+            <span class="font-medium text-slate-300">{{ h.target_id }}</span>
+            <span class="text-slate-500">{{ h.message }}</span>
+            <span class="ml-auto shrink-0 text-slate-600">{{ new Date(h.when).toLocaleString() }}</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="border-t border-edge/80">
+    <div class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-2 px-5 py-6 text-xs text-slate-500 sm:flex-row">
+      <p>100% open source &middot; single static binary</p>
+      <div class="flex items-center gap-4">
+        <a :href="repos.data" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 transition hover:text-slate-300">
+          <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+          IP data: cloud-provider-ip-addresses
+        </a>
+        <a :href="repos.tool" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 transition hover:text-slate-300">
+          <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.37.5 0 5.78 0 12.29c0 5.2 3.44 9.6 8.21 11.16.6.11.82-.25.82-.57v-2c-3.34.71-4.04-1.58-4.04-1.58-.55-1.36-1.34-1.73-1.34-1.73-1.09-.73.08-.72.08-.72 1.2.08 1.84 1.21 1.84 1.21 1.07 1.8 2.81 1.28 3.5.98.11-.76.42-1.28.76-1.57-2.67-.3-5.47-1.31-5.47-5.83 0-1.29.47-2.34 1.24-3.17-.13-.3-.54-1.52.11-3.18 0 0 1.01-.32 3.3 1.21a11.6 11.6 0 0 1 6.01 0c2.29-1.53 3.3-1.21 3.3-1.21.65 1.66.24 2.88.12 3.18.77.83 1.23 1.88 1.23 3.17 0 4.53-2.81 5.53-5.49 5.82.43.37.81 1.1.81 2.22v3.29c0 .32.22.69.83.57A12.02 12.02 0 0 0 24 12.29C24 5.78 18.63.5 12 .5z"/></svg>
+          ip-watch
+        </a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- toast -->
+  <transition enter-active-class="transition" enter-from-class="opacity-0 translate-y-2" leave-active-class="transition" leave-to-class="opacity-0">
+    <div v-if="toast.show" :class="toast.type==='error' ? 'border-rose-500/60 text-rose-200' : 'border-emerald-500/60 text-emerald-200'"
+      class="fixed bottom-5 left-1/2 z-30 -translate-x-1/2 rounded-xl border bg-panel px-4 py-2.5 text-sm shadow-2xl">
+      {{ toast.msg }}
+    </div>
+  </transition>
+</div>
+
+<script>
+const { createApp } = Vue;
+createApp({
+  data() {
+    return {
+      repos: {
+        tool: 'https://github.com/rezmoss/ip-watch',
+        data: 'https://github.com/rezmoss/cloud-provider-ip-addresses',
+      },
+      providers: [],
+      providerPick: '',
+      targets: [],
+      results: [],
+      history: [],
+      dockerContainers: [],
+      dockerError: '',
+      settings: { webhook: '', always: false },
+      busy: false,
+      toast: { show: false, msg: '', type: 'ok' },
+      form: this.blankForm(),
+    };
+  },
+  computed: {
+    isConfigEngine() { return !['nftables', 'iptables', 'ufw'].includes(this.form.engine); },
+    showRealIP() { return ['nginx', 'apache', 'caddy', 'haproxy'].includes(this.form.engine); },
+    showSelector() { return ['nginx', 'caddy', 'apache', 'haproxy'].includes(this.form.engine); },
+    engineLabel() { return this.form.engine; },
+    configPlaceholder() {
+      return { nginx: '/etc/nginx/sites-enabled/default', caddy: '/etc/caddy/Caddyfile',
+               apache: '/etc/apache2/apache2.conf', haproxy: '/etc/haproxy/haproxy.cfg' }[this.form.engine] || '';
+    },
+    selectorLabel() {
+      return { nginx: 'server_name', caddy: 'site address', apache: 'vhost ServerName', haproxy: 'frontend name' }[this.form.engine] || 'selector';
+    },
+    selectorPlaceholder() {
+      return { nginx: 'example.com', caddy: ':80', apache: 'example.com', haproxy: 'http' }[this.form.engine] || '';
+    },
+  },
+  methods: {
+    blankForm() {
+      return { editing: false, id: '', providers: [], mode: 'allow', engine: 'nginx',
+               transport: 'local', container: '',
+               file: '', selector: '', real_ip: true, ports: '', admin_allow_ips: '', allow_admin_ports: false, enabled: true };
+    },
+    addProvider() {
+      const p = this.providerPick || (this.providers[0] && this.providers[0].name);
+      if (p && !this.form.providers.includes(p)) this.form.providers.push(p);
+    },
+    removeProvider(p) { this.form.providers = this.form.providers.filter(x => x !== p); },
+    setTransport(which) { this.form.transport = which; if (which === 'docker') this.loadDockerContainers(); },
+    async loadDockerContainers() {
+      try { this.dockerError = ''; this.dockerContainers = await this.jget('/api/docker/containers'); }
+      catch (e) { this.dockerError = e.message; this.dockerContainers = []; }
+    },
+    resetForm() { this.form = this.blankForm(); },
+    notify(msg, type = 'ok') {
+      this.toast = { show: true, msg, type };
+      clearTimeout(this._t); this._t = setTimeout(() => this.toast.show = false, 3200);
+    },
+    async jget(u) { const r = await fetch(u); if (!r.ok) throw new Error(await r.text()); return r.json(); },
+    async loadProviders() {
+      try { this.providers = await this.jget('/api/providers'); if (this.providers[0]) this.providerPick = this.providers[0].name; }
+      catch (e) { this.notify('Could not load providers: ' + e.message, 'error'); }
+    },
+    async loadConfig() {
+      try {
+        const c = await this.jget('/api/config');
+        this.targets = c.targets || [];
+        this.settings = { webhook: c.notify?.webhook || '', always: !!c.notify?.always };
+      } catch (e) { this.notify('Could not load config: ' + e.message, 'error'); }
+    },
+    async loadHistory() {
+      try { const h = await this.jget('/api/history'); this.history = h.recent || []; }
+      catch (e) { /* history is non-critical */ }
+    },
+    async saveSettings() {
+      try {
+        const r = await fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ notify: { webhook: this.settings.webhook, always: this.settings.always } }) });
+        if (!r.ok) throw new Error(await r.text());
+        this.notify('Notification settings saved');
+      } catch (e) { this.notify(e.message, 'error'); }
+    },
+    async testWebhook() {
+      if (!this.settings.webhook) { this.notify('Enter and save a webhook first', 'error'); return; }
+      try {
+        const r = await fetch('/api/notify/test', { method: 'POST' });
+        if (!r.ok) throw new Error(await r.text());
+        this.notify('Test notification sent');
+      } catch (e) { this.notify('Test failed: ' + e.message, 'error'); }
+    },
+    edit(t) {
+      this.form = { editing: true, id: t.id, providers: (t.providers || (t.provider ? [t.provider] : [])).slice(),
+        mode: t.mode, engine: t.engine || 'nginx',
+        transport: t.transport || 'local', container: t.docker?.container || '',
+        file: t.config?.file || '', selector: t.config?.selector || '',
+        real_ip: !!t.config?.real_ip, ports: (t.firewall?.ports || []).join(', '),
+        allow_admin_ports: !!t.firewall?.allow_admin_ports,
+        admin_allow_ips: (t.admin_allow_ips || []).join(', '), enabled: !!t.enabled };
+      if (this.form.transport === 'docker') this.loadDockerContainers();
+    },
+    async saveTarget() {
+      if (!this.form.id) { this.notify('Target ID is required', 'error'); return; }
+      if (!this.form.providers.length) { this.notify('Add at least one provider', 'error'); return; }
+      if (this.form.transport === 'docker' && !this.form.container) { this.notify('Select a container', 'error'); return; }
+      const ports = [];
+      for (const tok of this.form.ports.split(',').map(p => p.trim()).filter(Boolean)) {
+        if (!/^\d+$/.test(tok)) { this.notify('Invalid port: ' + tok, 'error'); return; }
+        const n = parseInt(tok, 10);
+        if (n < 1 || n > 65535) { this.notify('Port out of range (1-65535): ' + tok, 'error'); return; }
+        ports.push(n);
+      }
+      const adminIPs = this.form.admin_allow_ips.split(',').map(s => s.trim()).filter(Boolean);
+      const body = { id: this.form.id, providers: this.form.providers, mode: this.form.mode,
+        engine: this.form.engine, transport: this.form.transport, enabled: this.form.enabled,
+        admin_allow_ips: adminIPs,
+        docker: { container: this.form.container },
+        config: { file: this.form.file, selector: this.form.selector, real_ip: this.form.real_ip },
+        firewall: { ports: ports, allow_admin_ports: this.form.allow_admin_ports } };
+      this.busy = true;
+      try {
+        const r = await fetch('/api/targets', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        if (!r.ok) throw new Error(await r.text());
+        await this.loadConfig(); this.resetForm(); this.notify('Target saved');
+      } catch (e) { this.notify(e.message, 'error'); } finally { this.busy = false; }
+    },
+    async uninstall(id) {
+      if (!confirm('Uninstall ' + id + '? This removes its applied rules but keeps the target.')) return;
+      this.busy = true;
+      try {
+        const r = await fetch('/api/targets/' + encodeURIComponent(id) + '/uninstall', { method: 'POST' });
+        const res = await r.json();
+        this.results = [res];
+        this.notify(res.ok ? 'Uninstalled ' + id : 'Uninstall failed: ' + res.message, res.ok ? 'ok' : 'error');
+      } catch (e) { this.notify(e.message, 'error'); } finally { this.busy = false; }
+    },
+    async del(id) {
+      if (!confirm('Delete target ' + id + '? Its applied rules will be removed too.')) return;
+      const r = await fetch('/api/targets/' + encodeURIComponent(id), { method: 'DELETE' });
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        this.notify((body.error || 'Delete failed') + (body.uninstall ? ': ' + body.uninstall.message : ''), 'error');
+        return;
+      }
+      await this.loadConfig(); this.notify('Target deleted');
+    },
+    async apply(dry) {
+      this.busy = true;
+      try {
+        const r = await fetch('/api/apply' + (dry ? '?dry=1' : ''), { method: 'POST' });
+        this.results = (await r.json()) || [];
+        if (!this.results.length) { this.notify('No enabled targets to apply', 'error'); }
+        else {
+          const failed = this.results.filter(x => !x.ok).length;
+          this.notify(dry ? 'Dry run complete' : (failed ? failed + ' target(s) failed' : 'Applied successfully'), failed ? 'error' : 'ok');
+        }
+        if (!dry) { await this.loadConfig(); await this.loadHistory(); }
+      } catch (e) { this.notify(e.message, 'error'); } finally { this.busy = false; }
+    },
+  },
+  async mounted() { await this.loadProviders(); await this.loadConfig(); await this.loadHistory(); },
+}).mount('#app');
+</script>
+</body>
+</html>

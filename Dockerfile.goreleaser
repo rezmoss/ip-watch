@@ -1,0 +1,18 @@
+# Release image built by GoReleaser. Unlike ./Dockerfile (which compiles from
+# source), this just copies the already-built static binary into a minimal base.
+# distroless/static ships CA certificates and is multi-arch (amd64/arm64).
+FROM gcr.io/distroless/static-debian12
+
+COPY ip-watch /usr/local/bin/ip-watch
+
+# Bind all interfaces inside the container so a published port works. ip-watch
+# refuses to start on a non-loopback address without auth, so you MUST provide
+# IPWATCH_AUTH_USERNAME/PASSWORD (recommended) or set IPWATCH_INSECURE=1.
+ENV IPWATCH_CONFIG=/data/config.json
+ENV IPWATCH_LISTEN=0.0.0.0:8080
+EXPOSE 8080
+VOLUME ["/data"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD ["/usr/local/bin/ip-watch", "healthcheck"]
+ENTRYPOINT ["/usr/local/bin/ip-watch"]
+CMD ["serve"]

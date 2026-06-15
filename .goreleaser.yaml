@@ -1,0 +1,231 @@
+# GoReleaser config — https://goreleaser.com
+# Build & validate locally without publishing:
+#   goreleaser check
+#   goreleaser release --snapshot --clean      # full run into ./dist, no upload
+# A real release is cut by pushing a tag (v1.2.3); see .github/workflows/release.yml.
+version: 2
+
+project_name: ip-watch
+
+before:
+  hooks:
+    - go mod tidy
+    - go vet ./...
+
+builds:
+  - id: ip-watch
+    main: ./cmd/ip-watch
+    binary: ip-watch
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    # ip-watch manages Linux webservers, firewalls and systemd — it is a
+    # Linux-only tool, so we ship every practical Linux architecture.
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+      - arm
+      - "386"
+      - riscv64
+      - ppc64le
+      - s390x
+    goarm:
+      - "6"
+      - "7"
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: ip-watch
+    ids:
+      - ip-watch
+    formats:
+      - tar.gz
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    files:
+      - README.md
+      - LICENSE
+      - PLAN.md
+      - deploy/ip-watch.service
+      - deploy/install.sh
+
+checksum:
+  name_template: "checksums.txt"
+
+# Linux native packages so users can install with their distro package manager
+# (apt / dnf / yum / zypper / apk). Each package ships the binary, the systemd
+# unit, and a post-install hook that seeds the config + starts the service.
+nfpms:
+  - id: ip-watch
+    package_name: ip-watch
+    vendor: Rez Moss
+    homepage: https://github.com/rezmoss/ip-watch
+    maintainer: Rez Moss <rez@cloudaid.net>
+    description: |-
+      Keep cloud-provider IP ranges applied to your webserver/firewall automatically.
+      Fetches provider IP lists, safely wires allow/deny rules into nginx/caddy/apache/
+      haproxy or nftables/iptables/ufw, validates, reloads, and refreshes daily.
+    license: MIT
+    formats:
+      - deb
+      - rpm
+      - apk
+    bindir: /usr/bin
+    section: net
+    # Optional helpers the engines shell out to; we don't hard-depend on them so
+    # one package works across every engine. Listed as recommendations instead.
+    recommends:
+      - nginx
+    contents:
+      - src: deploy/ip-watch.packaged.service
+        dst: /lib/systemd/system/ip-watch.service
+      - src: README.md
+        dst: /usr/share/doc/ip-watch/README.md
+      - src: LICENSE
+        dst: /usr/share/doc/ip-watch/LICENSE
+    scripts:
+      postinstall: deploy/scripts/postinstall.sh
+      preremove: deploy/scripts/preremove.sh
+      postremove: deploy/scripts/postremove.sh
+
+# Multi-arch container images pushed to GitHub Container Registry (ghcr.io).
+# Uses the workflow's GITHUB_TOKEN — no extra secrets needed. To also push to
+# Docker Hub, add another registry to the tags + a docker login step.
+dockers:
+  - id: ip-watch-amd64
+    goos: linux
+    goarch: amd64
+    dockerfile: Dockerfile.goreleaser
+    use: buildx
+    image_templates:
+      - "ghcr.io/rezmoss/ip-watch:{{ .Version }}-amd64"
+      - "ghcr.io/rezmoss/ip-watch:latest-amd64"
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.source=https://github.com/rezmoss/ip-watch"
+      - "--label=org.opencontainers.image.licenses=MIT"
+  - id: ip-watch-arm64
+    goos: linux
+    goarch: arm64
+    dockerfile: Dockerfile.goreleaser
+    use: buildx
+    image_templates:
+      - "ghcr.io/rezmoss/ip-watch:{{ .Version }}-arm64"
+      - "ghcr.io/rezmoss/ip-watch:latest-arm64"
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.source=https://github.com/rezmoss/ip-watch"
+      - "--label=org.opencontainers.image.licenses=MIT"
+
+docker_manifests:
+  - name_template: "ghcr.io/rezmoss/ip-watch:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/rezmoss/ip-watch:{{ .Version }}-amd64"
+      - "ghcr.io/rezmoss/ip-watch:{{ .Version }}-arm64"
+  - name_template: "ghcr.io/rezmoss/ip-watch:latest"
+    image_templates:
+      - "ghcr.io/rezmoss/ip-watch:latest-amd64"
+      - "ghcr.io/rezmoss/ip-watch:latest-arm64"
+
+# Group commits into the release notes by Conventional Commit type
+# (feat -> Added, fix -> Fixed, …). Commits that match `exclude` are dropped.
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^ci:"
+      - "^style:"
+      - "Merge pull request"
+      - "Merge branch"
+  groups:
+    - title: "✨ Added"
+      regexp: '^.*?feat(\(.+\))??!?:.+$'
+      order: 0
+    - title: "🐛 Fixed"
+      regexp: '^.*?fix(\(.+\))??!?:.+$'
+      order: 1
+    - title: "⚡ Performance"
+      regexp: '^.*?perf(\(.+\))??!?:.+$'
+      order: 2
+    - title: "♻️ Refactor"
+      regexp: '^.*?refactor(\(.+\))??!?:.+$'
+      order: 3
+    - title: "🔒 Security"
+      regexp: '^.*?(sec|security)(\(.+\))??!?:.+$'
+      order: 4
+    - title: "Other"
+      order: 999
+
+release:
+  github:
+    owner: rezmoss
+    name: ip-watch
+  draft: false
+  prerelease: auto
+  name_template: "ip-watch {{ .Version }}"
+  footer: |
+    ## Install
+
+    **Binary (any Linux arch):** download the matching `ip-watch_{{ .Version }}_linux_*.tar.gz` below, then:
+    ```sh
+    tar xzf ip-watch_*.tar.gz && sudo ./deploy/install.sh ./ip-watch
+    ```
+
+    **Debian/Ubuntu:** `sudo dpkg -i ip-watch_*_amd64.deb`
+    **Fedora/RHEL/openSUSE:** `sudo rpm -i ip-watch_*_amd64.rpm`
+    **Alpine:** `sudo apk add --allow-untrusted ip-watch_*_amd64.apk`
+    **Docker:** `docker pull ghcr.io/rezmoss/ip-watch:{{ .Version }}`
+    **Go:** `go install github.com/rezmoss/ip-watch/cmd/ip-watch@{{ .Tag }}`
+
+    **Verify** against `checksums.txt`:
+    ```sh
+    sha256sum -c checksums.txt --ignore-missing
+    ```
+
+# Reproducible source archive attached to each release.
+source:
+  enabled: true
+
+# --- Optional channels, ready to enable once their prerequisites exist ---
+# Each needs a one-time setup (a tap repo, an AUR SSH key, registry secrets);
+# they're commented so the first tag releases cleanly with only GITHUB_TOKEN.
+# See the post-release checklist for what to provision.
+#
+# brews:
+#   - name: ip-watch
+#     repository:
+#       owner: rezmoss
+#       name: homebrew-tap        # create github.com/rezmoss/homebrew-tap first
+#     homepage: https://github.com/rezmoss/ip-watch
+#     description: Keep cloud-provider IP ranges applied to your webserver/firewall
+#     license: MIT
+#     skip_upload: auto           # don't push for prereleases
+#
+# aurs:
+#   - name: ip-watch-bin
+#     homepage: https://github.com/rezmoss/ip-watch
+#     description: Keep cloud-provider IP ranges applied to your webserver/firewall
+#     maintainers:
+#       - Rez Moss <rez@cloudaid.net>
+#     license: MIT
+#     private_key: "{{ .Env.AUR_KEY }}"
+#     git_url: ssh://aur@aur.archlinux.org/ip-watch-bin.git

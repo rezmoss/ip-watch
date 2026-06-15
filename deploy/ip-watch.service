@@ -1,0 +1,32 @@
+[Unit]
+Description=ip-watch - keep cloud-provider IP ranges applied to your webserver/firewall
+Documentation=https://github.com/rezmoss/ip-watch
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/ip-watch serve
+Environment=IPWATCH_CONFIG=/etc/ip-watch/config.json
+Restart=on-failure
+RestartSec=5
+
+# ip-watch edits webserver config and/or firewall rules and reloads services,
+# so it runs as root. The hardening below is conservative; ProtectSystem=full
+# keeps /usr and /boot read-only while allowing the config dirs listed in
+# ReadWritePaths. Trim the list to the engines you actually use, or remove the
+# hardening lines entirely if you hit a path this doesn't cover.
+User=root
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+# Managed config locations for every supported engine + ip-watch state.
+ReadWritePaths=/etc/ip-watch /var/lib/ip-watch
+ReadWritePaths=/etc/nginx /etc/caddy /etc/apache2 /etc/httpd /etc/haproxy /usr/local/etc/haproxy
+# Firewall engines (nftables/iptables/ufw) need to touch the network subsystem.
+ReadWritePaths=/etc/ufw /etc/default/ufw
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_DAC_OVERRIDE CAP_CHOWN CAP_KILL CAP_SETUID CAP_SETGID
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,6 @@
+/ip-watch
+/dist/
+/coverage.out
+*.bak
+*.ipwatch-*.bak
+config.json
